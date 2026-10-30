@@ -8,6 +8,24 @@ from core.providers.vad.base import VADProviderBase
 TAG = __name__
 logger = setup_logging()
 
+# Alpha 2: a file that gets a new mtime while a person speaks (env XIAOZHI_TURN_SIGNAL).
+# Other work on the host (RL training) reads the mtime and pauses for the voice turn.
+TURN_SIGNAL = os.environ.get("XIAOZHI_TURN_SIGNAL", "")
+TURN_SIGNAL_EVERY_S = 0.5
+_turn_signal_last = 0.0
+
+
+def touch_turn_signal():
+    global _turn_signal_last
+    now = time.time()
+    if not TURN_SIGNAL or now - _turn_signal_last < TURN_SIGNAL_EVERY_S:
+        return
+    _turn_signal_last = now
+    try:
+        os.utime(TURN_SIGNAL, None)
+    except OSError as e:
+        logger.bind(tag=TAG).warning(f"turn signal {TURN_SIGNAL}: {e}")
+
 
 class VADProvider(VADProviderBase):
     def __init__(self, config):
@@ -108,6 +126,7 @@ class VADProvider(VADProviderBase):
                     if stop_duration >= self.silence_threshold_ms:
                         conn.client_voice_stop = True
                 if client_have_voice:
+                    touch_turn_signal()
                     conn.client_have_voice = True
                     conn.vad_last_voice_time = time.time() * 1000
 
