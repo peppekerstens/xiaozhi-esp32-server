@@ -1280,6 +1280,13 @@ class ConnectionHandler:
 
                 if content is not None and len(content) > 0 and required_mode and not tool_call_flag:
                     held_text.append(content)
+                    if len("".join(held_text)) > 40:
+                        # Required mode, but the model writes text: stop at once and retry
+                        # (robot test: a full text answer took 13 s before the retry).
+                        close = getattr(llm_responses, "close", None)
+                        if close:
+                            close()
+                        break
                 elif content is not None and len(content) > 0:
                     if not tool_call_flag:
                         if depth > 0 and not response_message and not content[:1].isspace():
