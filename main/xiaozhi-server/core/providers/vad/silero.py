@@ -73,6 +73,7 @@ class VADProvider(VADProviderBase):
     def is_vad(self, conn, pcm_frame):
         # 手动模式：直接返回True，不进行实时VAD检测，所有音频都缓存
         if conn.client_listen_mode == "manual":
+            touch_turn_signal()
             return True
 
         try:
