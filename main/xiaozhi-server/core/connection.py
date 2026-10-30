@@ -3,6 +3,7 @@ import sys
 import copy
 import json
 import re
+import fnmatch
 import uuid
 import time
 import queue
@@ -44,7 +45,7 @@ from config.manage_api_client import DeviceNotFoundException, DeviceBindExceptio
 from core.utils.prompt_manager import PromptManager
 from core.utils.voiceprint_provider import VoiceprintProvider
 from core.utils.util import get_system_error_response
-from core.utils import textUtils
+from core.utils import textUtils, turn_gate
 
 
 TAG = __name__
@@ -680,6 +681,9 @@ class ConnectionHandler:
             return
         if not hasattr(self, "func_handler") or self.func_handler is None:
             return
+        if not self._fc_config().get("direct_answer", True):
+            # The few-shot examples are Chinese and show direct_answer and the exit tool.
+            return
 
         tools = self.func_handler.get_functions()
         if not tools:
@@ -1047,6 +1051,27 @@ class ConnectionHandler:
         if hasattr(self, "loop") and self.loop:
             asyncio.run_coroutine_threadsafe(self.func_handler._initialize(), self.loop)
 
+    def _fc_config(self):
+        """The config of the selected Intent module (function_call)."""
+        try:
+            return self.config["Intent"][self.config["selected_module"]["Intent"]] or {}
+        except (KeyError, TypeError):
+            return {}
+
+    def _filter_functions(self, functions):
+        """Keep only the tools that match ``tools_allow`` (fnmatch patterns).
+
+        The patterns match the sanitized tool name (``self_robot_led_set_head``).
+        No ``tools_allow`` (or an empty list) keeps all tools.
+        """
+        allow = self._fc_config().get("tools_allow") or []
+        if not allow:
+            return functions
+        return [
+            f for f in functions
+            if any(fnmatch.fnmatch(f.get("function", {}).get("name", ""), p) for p in allow)
+        ]
+
     def change_system_prompt(self, prompt):
         self.prompt = prompt
         # 更新系统prompt至上下文
@@ -1100,11 +1125,13 @@ class ConnectionHandler:
                 and hasattr(self, "func_handler")
                 and not force_final_answer
         ):
-            functions = list(self.func_handler.get_functions())
+            functions = self._filter_functions(list(self.func_handler.get_functions()))
             # 仅在第一层调用时注入 direct_answer 虚拟工具
             # 递归调用（depth>0）不注入，避免模型在生成文本回复时再次调 direct_answer 导致循环
-            if functions is not None and depth == 0:
+            if functions is not None and depth == 0 and self._fc_config().get("direct_answer", True):
                 functions.append(DIRECT_ANSWER_TOOL)
+            if not functions:
+                functions = None
 
         response_message = []
 
@@ -1152,9 +1179,14 @@ class ConnectionHandler:
         tool_calls_list = []  # 格式: [{"id": "", "name": "", "arguments": ""}]
         content_arguments = ""
         emotion_flag = True
+        stale = False
         try:
             for response in llm_responses:
                 if self.client_abort:
+                    break
+                if turn_gate.superseded(self):
+                    # A newer question waits: stop this call, close the stream.
+                    stale = True
                     break
                 if self.intent_type == "function_call" and functions is not None:
                     content, tools_call = response
@@ -1184,7 +1216,8 @@ class ConnectionHandler:
                                 if safe_end > sent_len:
                                     new_part = da_text[sent_len:safe_end]
                                     # 清理 delta 中可能泄漏的 JSON 闭合垃圾
-                                    new_part = self._clean_response_garbage(new_part)
+                                    # Keep the spaces at the edges of a delta (issue: "I'mAlpha.").
+                                    new_part = self._clean_response_garbage(new_part, stream=True)
                                     if new_part:
                                         tc["_da_sent"] = safe_end
                                         self.tts.tts_text_queue.put(
@@ -1237,6 +1270,14 @@ class ConnectionHandler:
                     )
                 )
             return
+        if stale:
+            close = getattr(llm_responses, "close", None)
+            if close:
+                close()
+            self.logger.bind(tag=TAG).info(f"turn_gate: stale question stopped: {query}")
+            if depth == 0:
+                self.dialogue.remove_last_user(query)
+            return None
         # 处理function call
         if tool_call_flag:
             bHasError = False
@@ -1538,6 +1579,7 @@ class ConnectionHandler:
 
     def clearSpeakStatus(self):
         self.client_is_speaking = False
+        turn_gate.on_speech_end(self)
         self.logger.bind(tag=TAG).debug(f"清除服务端讲话状态")
 
     async def close(self, ws=None):
@@ -1802,7 +1844,7 @@ class ConnectionHandler:
         return raw
 
     @staticmethod
-    def _clean_response_garbage(text):
+    def _clean_response_garbage(text, stream=False):
         """清理 response 中可能泄漏的 JSON 闭合符号。
         模型有时会在 response 内容中生成 JSON 闭合字符（如 ）"}} 或 '})，
         这些不是故事内容的一部分，需要去除。
@@ -1819,6 +1861,10 @@ class ConnectionHandler:
                 continue
             cleaned.append(line)
         result = '\n'.join(cleaned)
+        if stream:
+            # A stream delta is a middle part of the reply. Its edge spaces
+            # separate words, and the safe buffer holds back the JSON tail.
+            return result
         # 清理末尾残留的 JSON 闭合符号
         result = re.sub(r'["\'}\]]+$', '', result.rstrip()).rstrip()
         return result

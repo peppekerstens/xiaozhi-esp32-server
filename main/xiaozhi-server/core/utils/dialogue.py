@@ -31,6 +31,15 @@ class Dialogue:
     def put(self, message: Message):
         self.dialogue.append(message)
 
+    def remove_last_user(self, content: str) -> bool:
+        """Remove the last user message with ``content`` (a stale question)."""
+        for i in range(len(self.dialogue) - 1, -1, -1):
+            m = self.dialogue[i]
+            if m.role == "user" and m.content == content:
+                del self.dialogue[i]
+                return True
+        return False
+
     def getMessages(self, m, dialogue):
         if m.tool_calls is not None:
             dialogue.append({"role": m.role, "tool_calls": m.tool_calls})

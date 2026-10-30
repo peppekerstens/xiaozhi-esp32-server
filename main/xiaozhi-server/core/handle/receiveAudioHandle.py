@@ -9,6 +9,7 @@ from core.utils.util import audio_to_data
 from core.handle.abortHandle import handleAbortMessage
 from core.handle.intentHandler import handle_user_intent
 from core.utils.output_counter import check_device_output_limit
+from core.utils import turn_gate
 from core.handle.sendAudioHandle import send_stt_message, SentenceType
 
 TAG = __name__
@@ -40,7 +41,7 @@ async def resume_vad_detection(conn: "ConnectionHandler"):
     conn.just_woken_up = False
 
 
-async def startToChat(conn: "ConnectionHandler", text):
+async def startToChat(conn: "ConnectionHandler", text, source="voice"):
     # 检查输入是否是JSON格式（包含说话人信息）
     speaker_name = None
     actual_text = text
@@ -87,8 +88,22 @@ async def startToChat(conn: "ConnectionHandler", text):
             await max_out_size(conn)
             return
 
+    gate = turn_gate.enabled(conn)
+    if gate and source == "voice":
+        action = turn_gate.check(conn, actual_text)
+        if action == "drop":
+            return
+        if action == "stop":
+            turn_gate.clear_pending(conn)
+            await handleAbortMessage(conn)
+            return
+    elif gate and conn.client_is_speaking:
+        # Typed text (send_text) is a clear request: stop the current answer.
+        turn_gate.clear_pending(conn)
+        await handleAbortMessage(conn)
+
     # manual 模式下不打断正在播放的内容
-    if conn.client_is_speaking and conn.client_listen_mode != "manual":
+    if not gate and conn.client_is_speaking and conn.client_listen_mode != "manual":
         await handleAbortMessage(conn)
 
     # 首先进行意图分析，使用实际文本内容
@@ -104,7 +119,10 @@ async def startToChat(conn: "ConnectionHandler", text):
     # 准备开始新会话
     conn.client_abort = False
 
-    conn.executor.submit(conn.chat, actual_text)
+    if gate:
+        turn_gate.submit(conn, actual_text)
+    else:
+        conn.executor.submit(conn.chat, actual_text)
 
 
 async def no_voice_close_connect(conn: "ConnectionHandler", have_voice):
@@ -131,7 +149,7 @@ async def no_voice_close_connect(conn: "ConnectionHandler", have_voice):
             prompt = end_prompt.get("prompt")
             if not prompt:
                 prompt = "请你以```时间过得真快```未来头，用富有感情、依依不舍的话来结束这场对话吧。！"
-            await startToChat(conn, prompt)
+            await startToChat(conn, prompt, source="text")
 
 
 async def max_out_size(conn: "ConnectionHandler"):

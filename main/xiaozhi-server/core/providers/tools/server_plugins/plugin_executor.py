@@ -96,12 +96,15 @@ class ServerPluginExecutor(ToolExecutor):
         tools = {}
 
         # 获取必要的函数
-        necessary_functions = ["handle_exit_intent", "get_lunar"]
+        intent_config = self.config["Intent"][self.config["selected_module"]["Intent"]]
+        necessary_functions = intent_config.get(
+            "necessary_functions", ["handle_exit_intent", "get_lunar"]
+        )
+        if necessary_functions is None:
+            necessary_functions = []
 
         # 获取配置中的函数
-        config_functions = self.config["Intent"][
-            self.config["selected_module"]["Intent"]
-        ].get("functions", [])
+        config_functions = intent_config.get("functions", [])
 
         # 将模块级别的插件名展开为具体函数名（兜底机制）
         config_functions = self._expand_plugin_names(config_functions)

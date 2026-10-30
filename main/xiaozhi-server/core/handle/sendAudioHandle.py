@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.connection import ConnectionHandler
-from core.utils import textUtils
+from core.utils import textUtils, turn_gate
 from core.utils.util import audio_to_data
 from core.providers.tts.dto.dto import SentenceType
 from core.utils.audioRateController import AudioRateController
@@ -286,6 +286,8 @@ async def send_tts_message(conn: "ConnectionHandler", state, text=None):
     message = {"type": "tts", "state": state, "session_id": conn.session_id}
     if text is not None:
         message["text"] = textUtils.check_emoji(text)
+    if state == "sentence_start":
+        turn_gate.on_sentence(conn, text)
 
     # TTS播放结束
     if state == "stop":
