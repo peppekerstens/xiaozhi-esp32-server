@@ -5,6 +5,7 @@ import requests
 from config.logger import setup_logging
 from datetime import datetime
 from core.providers.tts.base import TTSProviderBase
+from core.utils.robot_guard import detect_language
 
 TAG = __name__
 logger = setup_logging()
@@ -18,6 +19,9 @@ class TTSProvider(TTSProviderBase):
         self.audio_file_type = config.get("format", "wav")
         self.output_file = config.get("output_dir", "tmp/")
         self.params = config.get("params")
+        # Fork (#16): voice per answer language, {voice} in params. conn.turn_language
+        # comes from robot_guard.update_turn_language (setting turn_language: auto).
+        self.voices = config.get("voices") or {}
 
         if isinstance(self.params, str):
             try:
@@ -35,6 +39,11 @@ class TTSProvider(TTSProviderBase):
         for k, v in self.params.items():
             if isinstance(v, str) and "{prompt_text}" in v:
                 v = v.replace("{prompt_text}", text)
+            if isinstance(v, str) and "{voice}" in v:
+                # The words of the sentence decide, the turn language breaks a tie.
+                lang = detect_language(text, getattr(self.conn, "turn_language", None) or "en")
+                v = v.replace("{voice}", self.voices.get(lang) or self.voices.get("en", ""))
+                logger.bind(tag=TAG).info(f"custom TTS voice: {v}")
             request_params[k] = v
 
         if self.method.upper() == "POST":

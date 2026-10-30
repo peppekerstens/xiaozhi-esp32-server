@@ -7,6 +7,7 @@ from plugins_func.loadplugins import auto_import_modules
 
 from .base import ToolType
 from plugins_func.register import Action, ActionResponse
+from core.utils import robot_guard
 from .unified_tool_manager import ToolManager
 from .server_plugins import ServerPluginExecutor
 from .server_mcp import ServerMCPExecutor
@@ -173,6 +174,12 @@ class UnifiedToolHandler:
                 await send_display_message(self.conn, f"% {function_name}")
             except Exception as e:
                 self.logger.warning(f"发送工具调用显示消息失败: {e}")
+
+            # Fork (#16): allowlist of actions, denied tools.
+            arguments, reject = robot_guard.check_call(self.conn, function_name, arguments)
+            if reject:
+                self.logger.warning(f"robot_guard: {reject}")
+                return ActionResponse(action=Action.REQLLM, result=reject)
 
             # 执行工具调用
             result = await self.tool_manager.execute_tool(function_name, arguments)

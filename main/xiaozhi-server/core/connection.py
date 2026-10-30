@@ -45,7 +45,7 @@ from config.manage_api_client import DeviceNotFoundException, DeviceBindExceptio
 from core.utils.prompt_manager import PromptManager
 from core.utils.voiceprint_provider import VoiceprintProvider
 from core.utils.util import get_system_error_response
-from core.utils import textUtils, turn_gate
+from core.utils import textUtils, turn_gate, robot_guard
 
 
 TAG = __name__
@@ -1089,6 +1089,14 @@ class ConnectionHandler:
             current_sentence_id = str(uuid.uuid4().hex)
             self.sentence_id = current_sentence_id  # 更新共享属性
             self.dialogue.put(Message(role="user", content=query))
+            # Fork (#16): answer language and tool guard state of this turn.
+            robot_guard.update_turn_language(self, query)
+            if getattr(self, "turn_language", None):
+                self.logger.bind(tag=TAG).info(f"robot_guard: turn language {self.turn_language}")
+            self._turn_tool_keys = set()
+            self._turn_no_tools = False
+            self._turn_retried = False
+            self._turn_force_required = False
             self.tts.tts_text_queue.put(
                 TTSMessageDTO(
                     sentence_id=current_sentence_id,
@@ -1124,8 +1132,10 @@ class ConnectionHandler:
                 self.intent_type == "function_call"
                 and hasattr(self, "func_handler")
                 and not force_final_answer
+                and not getattr(self, "_turn_no_tools", False)
         ):
             functions = self._filter_functions(list(self.func_handler.get_functions()))
+            functions = robot_guard.rewrite_functions(self, functions)
             # 仅在第一层调用时注入 direct_answer 虚拟工具
             # 递归调用（depth>0）不注入，避免模型在生成文本回复时再次调 direct_answer 导致循环
             if functions is not None and depth == 0 and self._fc_config().get("direct_answer", True):
@@ -1134,6 +1144,7 @@ class ConnectionHandler:
                 functions = None
 
         response_message = []
+        fc_kwargs = {}
 
         try:
             # 使用带记忆的对话
@@ -1154,13 +1165,29 @@ class ConnectionHandler:
                 speaker_for_system = cs
 
             if self.intent_type == "function_call" and functions is not None:
+                # Fork (#16): an action request must call a tool (tool_choice required).
+                retry = getattr(self, "_turn_force_required", False)
+                if (depth == 0 and robot_guard.needs_tool(self, query)) or retry:
+                    self._turn_force_required = False
+                    fc_kwargs["tool_choice"] = "required"
+                    self.logger.bind(tag=TAG).info("robot_guard: tool_choice required")
+                saved_hint = getattr(self.dialogue, "answer_hint", None)
+                if retry:
+                    # Another temperature and a hint: the router cache gives a new answer.
+                    fc_kwargs["temperature"] = 0.2
+                    self.dialogue.answer_hint = ((saved_hint or "") + " " + robot_guard.RETRY_HINT).strip()
+                try:
+                    llm_dialogue = self.dialogue.get_llm_dialogue_with_memory(
+                        memory_str, self.config.get("voiceprint", {}), speaker_for_system
+                    )
+                finally:
+                    self.dialogue.answer_hint = saved_hint
                 # 使用支持functions的streaming接口
                 llm_responses = self.llm.response_with_functions(
                     self.session_id,
-                    self.dialogue.get_llm_dialogue_with_memory(
-                        memory_str, self.config.get("voiceprint", {}), speaker_for_system
-                    ),
+                    llm_dialogue,
                     functions=functions,
+                    **fc_kwargs,
                 )
             else:
                 llm_responses = self.llm.response(
@@ -1173,6 +1200,9 @@ class ConnectionHandler:
             self.logger.bind(tag=TAG).error(f"LLM 处理出错 {query}: {e}")
             return None
 
+        # Fork (#16): in required mode hold the text until a tool call comes.
+        required_mode = bool(fc_kwargs.get("tool_choice"))
+        held_text = []
         # 处理流式响应
         tool_call_flag = False
         # 支持多个并行工具调用 - 使用列表存储
@@ -1203,6 +1233,14 @@ class ConnectionHandler:
                     if tools_call is not None and len(tools_call) > 0:
                         tool_call_flag = True
                         self._merge_tool_calls(tool_calls_list, tools_call)
+                        if len(tool_calls_list) > 1 and robot_guard.single_call(self):
+                            # Fork (#16): the first call is complete. Small models
+                            # repeat it many times: stop the stream here.
+                            del tool_calls_list[1:]
+                            close = getattr(llm_responses, "close", None)
+                            if close:
+                                close()
+                            break
 
                     # 流式提取 direct_answer 的 response 参数，实时送 TTS
                     # 使用安全缓冲区，防止 JSON 闭合符号泄漏到 TTS
@@ -1240,7 +1278,9 @@ class ConnectionHandler:
                         )
                     emotion_flag = False
 
-                if content is not None and len(content) > 0:
+                if content is not None and len(content) > 0 and required_mode and not tool_call_flag:
+                    held_text.append(content)
+                elif content is not None and len(content) > 0:
                     if not tool_call_flag:
                         if depth > 0 and not response_message and not content[:1].isspace():
                             # The answer after a tool call continues the text of the
@@ -1282,6 +1322,35 @@ class ConnectionHandler:
             if depth == 0:
                 self.dialogue.remove_last_user(query)
             return None
+        if required_mode and not tool_call_flag:
+            if not getattr(self, "_turn_retried", False):
+                # No tool call although the request needs one: retry once, required.
+                self.logger.bind(tag=TAG).info("robot_guard: no tool call, retry once")
+                self._turn_retried = True
+                self._turn_force_required = True
+                self.chat(None, depth=depth + 1)
+                if depth == 0:
+                    self.tts.tts_text_queue.put(
+                        TTSMessageDTO(
+                            sentence_id=current_sentence_id,
+                            sentence_type=SentenceType.LAST,
+                            content_type=ContentType.ACTION,
+                        )
+                    )
+                return True
+            # The retry also gave text only. That text can claim an action that did
+            # not occur: speak a fixed sentence instead.
+            self.logger.bind(tag=TAG).info(f"robot_guard: retry gave no tool call: {''.join(held_text)[:80]}")
+            for content in [robot_guard.fail_response(self)]:
+                response_message.append(content)
+                self.tts.tts_text_queue.put(
+                    TTSMessageDTO(
+                        sentence_id=current_sentence_id,
+                        sentence_type=SentenceType.MIDDLE,
+                        content_type=ContentType.TEXT,
+                        content_detail=content,
+                    )
+                )
         # 处理function call
         if tool_call_flag:
             bHasError = False
@@ -1355,6 +1424,26 @@ class ConnectionHandler:
                         return
 
                     tool_calls_list = real_tool_calls
+
+            if not bHasError and len(tool_calls_list) > 0 and robot_guard.single_call(self):
+                # Fork (#16): one call per step, and never the same call twice in a turn.
+                keys = getattr(self, "_turn_tool_keys", set())
+                tool_calls_list = [tc for tc in tool_calls_list[:1] if robot_guard.call_key(tc) not in keys]
+                if not tool_calls_list:
+                    self.logger.bind(tag=TAG).info("robot_guard: repeated tool call dropped")
+                    self._turn_no_tools = True
+                    self.chat(None, depth=depth + 1)
+                    if depth == 0:
+                        self.tts.tts_text_queue.put(
+                            TTSMessageDTO(
+                                sentence_id=current_sentence_id,
+                                sentence_type=SentenceType.LAST,
+                                content_type=ContentType.ACTION,
+                            )
+                        )
+                    return True
+                keys.add(robot_guard.call_key(tool_calls_list[0]))
+                self._turn_tool_keys = keys
 
             if not bHasError and len(tool_calls_list) > 0:
                 self.logger.bind(tag=TAG).debug(

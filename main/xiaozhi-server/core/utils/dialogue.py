@@ -119,6 +119,11 @@ class Dialogue:
             full_prompt = full_prompt.replace(
                 "{{current_time}}", datetime.now().strftime("%H:%M")
             )
+            # Fork (#16): the answer language of this turn (robot_guard).
+            full_prompt = full_prompt.replace(
+                "{{answer_language}}",
+                getattr(self, "answer_language", None) or "the language of the user",
+            )
 
             # 填充记忆
             if memory_str is not None:
@@ -168,5 +173,14 @@ class Dialogue:
         complete_actual = self._ensure_tool_calls_complete(actual_messages)
         for m in complete_actual:
             self.getMessages(m, dialogue)
+
+        # Fork (#16): a small LLM often answers Dutch in English. Add a short hint to
+        # the last user message of this request only (the history stays clean).
+        hint = getattr(self, "answer_hint", None)
+        if hint:
+            for msg in reversed(dialogue):
+                if msg.get("role") == "user" and isinstance(msg.get("content"), str):
+                    msg["content"] = msg["content"] + "\n" + hint
+                    break
 
         return dialogue

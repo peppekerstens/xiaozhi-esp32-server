@@ -172,6 +172,9 @@ class LLMProvider(LLMProviderBase):
             "stream": True,
             "tools": functions,
         }
+        # Fork (#16): tool_choice "required" for an action request.
+        if kwargs.get("tool_choice"):
+            request_params["tool_choice"] = kwargs["tool_choice"]
 
         optional_params = {
             "max_tokens": kwargs.get("max_tokens", self.max_tokens),
