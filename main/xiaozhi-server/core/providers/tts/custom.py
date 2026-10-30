@@ -5,7 +5,6 @@ import requests
 from config.logger import setup_logging
 from datetime import datetime
 from core.providers.tts.base import TTSProviderBase
-from core.utils.robot_guard import detect_language
 
 TAG = __name__
 logger = setup_logging()
@@ -40,8 +39,9 @@ class TTSProvider(TTSProviderBase):
             if isinstance(v, str) and "{prompt_text}" in v:
                 v = v.replace("{prompt_text}", text)
             if isinstance(v, str) and "{voice}" in v:
-                # The words of the sentence decide, the turn language breaks a tie.
-                lang = detect_language(text, getattr(self.conn, "turn_language", None) or "en")
+                # One voice for the whole answer: the language of the user turn.
+                # A switch per sentence gave mixed voices (robot test 2026-10-31).
+                lang = getattr(self.conn, "turn_language", None) or "en"
                 v = v.replace("{voice}", self.voices.get(lang) or self.voices.get("en", ""))
                 logger.bind(tag=TAG).info(f"custom TTS voice: {v}")
             request_params[k] = v
