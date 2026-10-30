@@ -1242,6 +1242,10 @@ class ConnectionHandler:
 
                 if content is not None and len(content) > 0:
                     if not tool_call_flag:
+                        if depth > 0 and not response_message and not content[:1].isspace():
+                            # The answer after a tool call continues the text of the
+                            # earlier call in the same TTS buffer: keep a space between.
+                            content = " " + content
                         response_message.append(content)
                         self.tts.tts_text_queue.put(
                             TTSMessageDTO(
