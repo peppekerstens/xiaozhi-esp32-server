@@ -40,7 +40,7 @@ def test_full_turn_gives_one_line():
     conn = FakeConn(clock)
     voice_timing.start(conn)
     clock.at(420); voice_timing.mark(conn, "asr_end")
-    clock.at(431); voice_timing.llm_call(conn)
+    clock.at(431); voice_timing.llm_call(conn, "a1")
     clock.at(690); voice_timing.mark(conn, "llm_first")
     clock.at(702); voice_timing.mark(conn, "tts_req")
     clock.at(800); voice_timing.mark(conn, "llm_end")
@@ -95,17 +95,33 @@ def test_old_answer_audio_does_not_set_new_turn():
     clock = FakeClock()
     conn = FakeConn(clock)
     voice_timing.start(conn)
-    clock.at(100); voice_timing.llm_call(conn)  # binds turn 1 to a1
+    clock.at(100); voice_timing.llm_call(conn, "a1")  # binds turn 1 to a1
     clock.at(200); voice_timing.mark(conn, "audio_first", "a1")
     clock.at(1000); voice_timing.start(conn)  # turn 2, not bound yet
     clock.at(1100); voice_timing.mark(conn, "audio_first", "a1")  # old audio
     conn.sentence_id = "b2"
-    clock.at(1400); voice_timing.llm_call(conn)  # binds turn 2 to b2
+    clock.at(1400); voice_timing.llm_call(conn, "b2")  # binds turn 2 to b2
     clock.at(1500); voice_timing.mark(conn, "audio_first", "a1")  # old audio
     clock.at(1700); voice_timing.mark(conn, "audio_first", "b2")
     clock.at(3000); voice_timing.finish(conn)
     assert "turn=1 " in conn.lines[0] and "audio_first=200 " in conn.lines[0]
     assert "turn=2 " in conn.lines[1] and "audio_first=700 " in conn.lines[1]
+
+
+def test_tool_call_llm_call_does_not_bind_new_turn():
+    """A tool call of the old answer (depth > 0) comes after the ASR start of
+    a new turn. It gives no id. The old audio then does not set audio_first."""
+    clock = FakeClock()
+    conn = FakeConn(clock)
+    voice_timing.start(conn)
+    clock.at(100); voice_timing.llm_call(conn, "a1")  # turn 1, depth 0
+    clock.at(1000); voice_timing.start(conn)  # turn 2 starts
+    clock.at(1100); voice_timing.llm_call(conn, None)  # depth 1 of answer a1
+    clock.at(1200); voice_timing.mark(conn, "audio_first", "a1")  # old audio
+    clock.at(3000); voice_timing.finish(conn)
+    assert "turn=2 " in conn.lines[1]
+    assert "audio_first=- " in conn.lines[1]
+    assert "llm_calls=1 " in conn.lines[1]
 
 
 def test_tts_req_binds_turn_without_llm_call():

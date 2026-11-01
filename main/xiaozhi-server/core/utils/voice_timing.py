@@ -19,8 +19,8 @@ All values are milliseconds from ``asr_start`` on a monotonic clock
 - tts_req: the first text segment goes to the TTS.
 - tts_first: the first TTS audio chunk is ready to send.
 - audio_first: the first audio frame of this turn went to the device. The
-  turn binds to the sentence id of its answer (``conn.sentence_id`` at the
-  LLM call, or the TTS message at ``tts_req``). A frame of an older answer
+  turn binds to the sentence id of its answer (the sentence id of the
+  top-level LLM call, or the TTS message at ``tts_req``). A frame of an older answer
   (barge-in, follow-up) does not set ``audio_first`` of a new turn.
 - tts_stop: the tts stop message goes to the device (all audio is sent).
 
@@ -173,9 +173,12 @@ def mark(conn, key: str, sentence_id: Optional[str] = None) -> None:
         pass
 
 
-def llm_call(conn) -> None:
+def llm_call(conn, sentence_id: Optional[str] = None) -> None:
+    """An LLM call. Only the top-level chat call (depth 0) gives its
+    sentence_id. A tool-call recursion (depth > 0) gives None and does not
+    bind the turn: it can belong to an older answer."""
     try:
-        _recorder(conn).llm_call(getattr(conn, "sentence_id", None))
+        _recorder(conn).llm_call(sentence_id)
     except Exception:
         pass
 

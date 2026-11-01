@@ -1184,7 +1184,8 @@ class ConnectionHandler:
                 finally:
                     self.dialogue.answer_hint = saved_hint
                 # 使用支持functions的streaming接口
-                voice_timing.llm_call(self)
+                # Bind the turn only at the top-level call (alpha2-brain#40).
+                voice_timing.llm_call(self, current_sentence_id if depth == 0 else None)
                 llm_responses = self.llm.response_with_functions(
                     self.session_id,
                     llm_dialogue,
@@ -1192,7 +1193,8 @@ class ConnectionHandler:
                     **fc_kwargs,
                 )
             else:
-                voice_timing.llm_call(self)
+                # Bind the turn only at the top-level call (alpha2-brain#40).
+                voice_timing.llm_call(self, current_sentence_id if depth == 0 else None)
                 llm_responses = self.llm.response(
                     self.session_id,
                     self.dialogue.get_llm_dialogue_with_memory(
