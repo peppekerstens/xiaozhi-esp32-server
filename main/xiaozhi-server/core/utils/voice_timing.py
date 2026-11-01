@@ -18,7 +18,10 @@ All values are milliseconds from ``asr_start`` on a monotonic clock
 - llm_calls: the number of LLM calls (a tool call adds one).
 - tts_req: the first text segment goes to the TTS.
 - tts_first: the first TTS audio chunk is ready to send.
-- audio_first: the first audio frame went to the device.
+- audio_first: the first audio frame of this turn went to the device. The
+  turn binds to the sentence id of its answer (``conn.sentence_id`` at the
+  LLM call, or the TTS message at ``tts_req``). A frame of an older answer
+  (barge-in, follow-up) does not set ``audio_first`` of a new turn.
 - tts_stop: the tts stop message goes to the device (all audio is sent).
 
 The line comes at tts stop, or at the start of the next turn when a turn did
@@ -53,6 +56,12 @@ class Turn:
         self.t0 = t0
         self.at: Dict[str, float] = {}
         self.llm_calls = 0
+        # The sentence id of the answer of this turn. The first bind wins.
+        self.sentence_id: Optional[str] = None
+
+    def bind(self, sentence_id: Optional[str]) -> None:
+        if self.sentence_id is None and sentence_id:
+            self.sentence_id = sentence_id
 
     def mark(self, key: str, now: float) -> None:
         if key in LAST_KEYS or key not in self.at:
@@ -89,15 +98,25 @@ class Recorder:
             self._turn.mark("asr_start", now)
             return old
 
-    def mark(self, key: str) -> None:
+    def mark(self, key: str, sentence_id: Optional[str] = None) -> None:
+        """Mark a key. For tts_req, sentence_id binds the turn. For
+        audio_first, sentence_id must match the bound id of the turn."""
         with self._lock:
-            if self._turn is not None:
-                self._turn.mark(key, self._clock())
+            turn = self._turn
+            if turn is None:
+                return
+            if key == "audio_first":
+                if turn.sentence_id is None or sentence_id != turn.sentence_id:
+                    return
+            elif sentence_id is not None:
+                turn.bind(sentence_id)
+            turn.mark(key, self._clock())
 
-    def llm_call(self) -> None:
+    def llm_call(self, sentence_id: Optional[str] = None) -> None:
         with self._lock:
             if self._turn is not None:
                 self._turn.llm_calls += 1
+                self._turn.bind(sentence_id)
                 self._turn.mark("llm_req", self._clock())
 
     def finish(self) -> Optional[Turn]:
@@ -110,14 +129,23 @@ class Recorder:
             return turn
 
 
+# Guards the first creation of the Recorder of a connection. The ASR thread,
+# the TTS thread and the event loop can call _recorder() at the same time.
+_CREATE_LOCK = threading.Lock()
+
+
 def _recorder(conn) -> Recorder:
     rec = getattr(conn, "_voice_timing", None)
-    if rec is None:
-        rec = Recorder()
-        try:
-            conn._voice_timing = rec
-        except Exception:
-            pass
+    if rec is not None:
+        return rec
+    with _CREATE_LOCK:
+        rec = getattr(conn, "_voice_timing", None)
+        if rec is None:
+            rec = Recorder()
+            try:
+                conn._voice_timing = rec
+            except Exception:
+                pass
     return rec
 
 
@@ -138,16 +166,16 @@ def start(conn) -> None:
         pass
 
 
-def mark(conn, key: str) -> None:
+def mark(conn, key: str, sentence_id: Optional[str] = None) -> None:
     try:
-        _recorder(conn).mark(key)
+        _recorder(conn).mark(key, sentence_id)
     except Exception:
         pass
 
 
 def llm_call(conn) -> None:
     try:
-        _recorder(conn).llm_call()
+        _recorder(conn).llm_call(getattr(conn, "sentence_id", None))
     except Exception:
         pass
 
