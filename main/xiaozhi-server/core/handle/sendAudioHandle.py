@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.connection import ConnectionHandler
-from core.utils import textUtils, turn_gate
+from core.utils import textUtils, turn_gate, voice_timing
 from core.utils.util import audio_to_data
 from core.providers.tts.dto.dto import SentenceType
 from core.utils.audioRateController import AudioRateController
@@ -273,6 +273,7 @@ async def _do_send_audio(conn: "ConnectionHandler", opus_packet, flow_control):
     else:
         # 直接发送opus数据包
         await conn.websocket.send(opus_packet)
+    voice_timing.mark(conn, "audio_first")
 
     # 更新流控状态
     flow_control["packet_count"] = packet_index + 1
@@ -312,6 +313,7 @@ async def send_tts_message(conn: "ConnectionHandler", state, text=None):
         if hasattr(conn, "audio_rate_controller") and conn.audio_rate_controller:
             conn.audio_rate_controller.stop_sending()
         conn.clearSpeakStatus()
+        voice_timing.finish(conn)
 
     # 发送消息到客户端
     await conn.websocket.send(json.dumps(message))

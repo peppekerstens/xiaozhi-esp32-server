@@ -16,6 +16,7 @@ from config.logger import setup_logging
 from core.utils import opus_encoder_utils
 from core.utils.tts import MarkdownCleaner, convert_percentage_to_range
 from core.utils.output_counter import add_device_output
+from core.utils import voice_timing
 from core.handle.reportHandle import enqueue_tts_report
 from core.handle.sendAudioHandle import sendAudioMessage
 from core.utils.util import audio_bytes_to_data_stream, audio_to_data_stream
@@ -388,6 +389,7 @@ class TTSProviderBase(ABC):
                     self.tts_text_buff.append(message.content_detail)
                     segment_text = self._get_segment_text()
                     if segment_text:
+                        voice_timing.mark(self.conn, "tts_req")
                         self.to_tts_stream(segment_text, opus_handler=self.handle_opus)
                 elif ContentType.FILE == message.content_type:
                     self._process_remaining_text_stream(opus_handler=self.handle_opus)
@@ -455,6 +457,8 @@ class TTSProviderBase(ABC):
                 # 收集上报音频数据
                 if isinstance(audio_datas, bytes):
                     enqueue_audio.append(audio_datas)
+                if audio_datas:
+                    voice_timing.mark(self.conn, "tts_first")
 
                 # 发送音频
                 future = asyncio.run_coroutine_threadsafe(

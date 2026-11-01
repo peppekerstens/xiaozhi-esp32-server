@@ -17,6 +17,7 @@ from core.providers.asr.dto.dto import InterfaceType
 from core.handle.receiveAudioHandle import startToChat
 from core.handle.reportHandle import enqueue_asr_report
 from core.utils.util import remove_punctuation_and_length
+from core.utils import voice_timing
 from core.handle.receiveAudioHandle import handleAudioMessage
 from typing import Optional, Tuple, List, NamedTuple, TYPE_CHECKING
 
@@ -85,6 +86,7 @@ class ASRProviderBase(ABC):
         """并行处理ASR和声纹识别"""
         try:
             total_start_time = time.monotonic()
+            voice_timing.start(conn)
 
             # 数据已经是PCM直接使用
             pcm_data = asr_audio_task
@@ -111,6 +113,7 @@ class ASRProviderBase(ABC):
             else:
                 asr_result = await asr_task
                 voiceprint_result = None
+            voice_timing.mark(conn, "asr_end")
 
             # 记录识别结果 - 检查是否为异常
             if isinstance(asr_result, Exception):

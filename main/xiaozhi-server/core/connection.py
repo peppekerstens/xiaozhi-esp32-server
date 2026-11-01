@@ -38,6 +38,7 @@ from core.providers.tools.unified_tool_handler import UnifiedToolHandler
 from plugins_func.loadplugins import auto_import_modules
 from plugins_func.register import Action, ActionResponse, all_function_registry, module_func_map
 from core.auth import AuthenticationError
+from core.utils import voice_timing
 from config.config_loader import get_private_config_from_api
 from core.providers.tts.dto.dto import ContentType, TTSMessageDTO, SentenceType
 from config.logger import setup_logging, build_module_string, create_connection_logger
@@ -1183,6 +1184,7 @@ class ConnectionHandler:
                 finally:
                     self.dialogue.answer_hint = saved_hint
                 # 使用支持functions的streaming接口
+                voice_timing.llm_call(self)
                 llm_responses = self.llm.response_with_functions(
                     self.session_id,
                     llm_dialogue,
@@ -1190,6 +1192,7 @@ class ConnectionHandler:
                     **fc_kwargs,
                 )
             else:
+                voice_timing.llm_call(self)
                 llm_responses = self.llm.response(
                     self.session_id,
                     self.dialogue.get_llm_dialogue_with_memory(
@@ -1212,6 +1215,7 @@ class ConnectionHandler:
         stale = False
         try:
             for response in llm_responses:
+                voice_timing.mark(self, "llm_first")
                 if self.client_abort:
                     break
                 if turn_gate.superseded(self):
@@ -1303,6 +1307,7 @@ class ConnectionHandler:
                             )
                         )
         except Exception as e:
+            voice_timing.mark(self, "llm_end")
             self.logger.bind(tag=TAG).error(f"LLM stream processing error: {e}")
             self.tts.tts_text_queue.put(
                 TTSMessageDTO(
@@ -1321,6 +1326,7 @@ class ConnectionHandler:
                     )
                 )
             return
+        voice_timing.mark(self, "llm_end")
         if stale:
             close = getattr(llm_responses, "close", None)
             if close:
