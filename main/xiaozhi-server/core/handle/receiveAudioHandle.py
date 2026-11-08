@@ -9,7 +9,7 @@ from core.utils.util import audio_to_data
 from core.handle.abortHandle import handleAbortMessage
 from core.handle.intentHandler import handle_user_intent
 from core.utils.output_counter import check_device_output_limit
-from core.utils import turn_gate
+from core.utils import turn_gate, robot_guard
 from core.handle.sendAudioHandle import send_stt_message, SentenceType
 
 TAG = __name__
@@ -86,6 +86,13 @@ async def startToChat(conn: "ConnectionHandler", text, source="voice"):
             conn.headers.get("device-id"), conn.max_output_size
         ):
             await max_out_size(conn)
+            return
+
+    # alpha2-brain#88 (D-62): voice text in a language that is off gets no turn.
+    if source == "voice":
+        lang_ok, lang_reason = robot_guard.language_check(conn, actual_text)
+        if not lang_ok:
+            conn.logger.bind(tag=TAG).info(f"voice language: drop, {lang_reason}: {actual_text!r}")
             return
 
     gate = turn_gate.enabled(conn)

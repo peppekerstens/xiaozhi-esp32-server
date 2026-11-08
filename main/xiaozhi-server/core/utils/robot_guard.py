@@ -14,6 +14,12 @@ Settings in ``Intent.function_call`` of the config:
 
 Setting ``turn_language`` (top level): ``auto`` sets ``conn.turn_language`` to
 ``nl`` or ``en`` from the user text. The custom TTS uses it to select the voice.
+
+Setting ``voice.languages`` (top level, alpha2-brain#88, owner decision D-62): the
+languages that the robot understands and speaks, for example ``[en]``. Voice text
+that is not in one of these languages gets no turn (see ``language_check``). The
+answer language and the TTS voice stay inside the list. Add ``nl`` to the list to
+switch Dutch on again. When the setting is missing, nothing is restricted.
 """
 
 import copy
@@ -42,7 +48,12 @@ _NL_WORDS = set(
     "eens even nu dan nog al mijn jouw jou hallo hoi dag ja nee goed ogen hoofd "
     "licht lampje rood groen blauw geel paars wit afstand muur knieën zitten sta "
     "vertel iets over kun maken jou vandaag waarom wanneer welke weet vind zeg "
-    "laat zien toe uit hem haar ons onze jullie bij tot zo heel veel weinig".split()
+    "laat zien toe uit hem haar ons onze jullie bij tot zo heel veel weinig "
+    "wel zou zou je zal gaat gaan komt kom moeten willen hebben worden wordt "
+    "mooi lekker gezellig koffie morgen vanavond straks nodig eigenlijk tegen "
+    "omdat zodat terwijl toch misschien altijd nooit soms helemaal gewoon echt "
+    "zeker alles niets iemand mensen kinderen huis buiten binnen werk dank bedankt "
+    "weer wij zij mij dus ook nou".split()
 )
 _EN_WORDS = set(
     "the a an and i you he she we they it about tell like is are am was were what where who how "
@@ -141,11 +152,45 @@ def detect_language(text, default="en"):
     return default
 
 
+def allowed_languages(conn):
+    """The set of language codes from ``voice.languages``, or None when it is not set."""
+    try:
+        langs = (conn.config.get("voice") or {}).get("languages")
+    except AttributeError:
+        return None
+    if isinstance(langs, str):
+        langs = [x for x in re.split(r"[,\s]+", langs) if x]
+    if not isinstance(langs, (list, tuple)) or not langs:
+        return None
+    return {str(x).strip().lower() for x in langs}
+
+
+def language_check(conn, text):
+    """Return ``(True, "")`` when the voice text may start a turn, else ``(False, reason)``.
+
+    The ASR (Parakeet) finds the language itself and does not report it. Thus the
+    language comes from a word count of the text (``detect_language``). A text with no
+    word of either list counts as an allowed language: there is no sign of Dutch.
+    """
+    allowed = allowed_languages(conn)
+    if allowed is None or not text:
+        return True, ""
+    default = "en" if "en" in allowed else sorted(allowed)[0]
+    found = detect_language(text, default)
+    if found in allowed:
+        return True, ""
+    return False, f"language {found} is off (voice.languages: {', '.join(sorted(allowed))})"
+
+
 def update_turn_language(conn, text):
     mode = str(conn.config.get("turn_language", "")).lower()
     if mode != "auto" or not text:
         return
-    conn.turn_language = detect_language(text, getattr(conn, "turn_language", None) or "en")
+    allowed = allowed_languages(conn)
+    found = detect_language(text, getattr(conn, "turn_language", None) or "en")
+    if allowed and found not in allowed:
+        found = "en" if "en" in allowed else sorted(allowed)[0]
+    conn.turn_language = found
     names = {"nl": "Dutch (Nederlands)", "en": "English"}
     conn.dialogue.answer_language = names.get(conn.turn_language, "English")
     hints = conn.config.get("turn_language_hints") or {"nl": "(Antwoord in het Nederlands.)"}
