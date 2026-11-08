@@ -17,13 +17,13 @@ from jinja2 import Template
 TAG = __name__
 
 WEEKDAY_MAP = {
-    "Monday": "星期一",
-    "Tuesday": "星期二",
-    "Wednesday": "星期三",
-    "Thursday": "星期四",
-    "Friday": "星期五",
-    "Saturday": "星期六",
-    "Sunday": "星期日",
+    "Monday": "Monday",
+    "Tuesday": "Tuesday",
+    "Wednesday": "Wednesday",
+    "Thursday": "Thursday",
+    "Friday": "Friday",
+    "Saturday": "Saturday",
+    "Sunday": "Sunday",
 }
 
 EMOJI_List = [
@@ -155,7 +155,7 @@ class PromptManager:
             from core.utils.util import get_ip_info
 
             ip_info = get_ip_info(client_ip, self.logger)
-            city = ip_info.get("city", "未知位置")
+            city = ip_info.get("city", "Unknown location")
             location = f"{city}"
 
             # 存入缓存
@@ -163,7 +163,7 @@ class PromptManager:
             return location
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"获取位置信息失败: {e}")
-            return "未知位置"
+            return "Unknown location"
 
     def _get_weather_info(self, conn: "ConnectionHandler", location: str) -> str:
         """获取天气信息"""
@@ -196,7 +196,7 @@ class PromptManager:
             event = threading.Event()
             conn.loop.call_soon_threadsafe(lambda: asyncio.ensure_future(_call()))
             if not event.wait(timeout=10):
-                raise TimeoutError("获取天气信息超时")
+                raise TimeoutError("The weather request timed out.")
             if exception_holder:
                 raise exception_holder[0]
             result = result_holder[0]
@@ -204,11 +204,11 @@ class PromptManager:
                 weather_report = result.result
                 self.cache_manager.set(self.CacheType.WEATHER, location, weather_report)
                 return weather_report
-            return "天气信息获取失败"
+            return "The weather could not be read."
 
         except Exception as e:
             self.logger.bind(tag=TAG).error(f"获取天气信息失败: {e}")
-            return "天气信息获取失败"
+            return "The weather could not be read."
 
     def update_context_info(self, conn, client_ip: str):
         """同步更新上下文信息"""
@@ -293,7 +293,7 @@ class PromptManager:
                 self.config.get("TTS", {})
                 .get(self.config.get("selected_module", {}).get("TTS", ""), {})
                 .get("language")
-                or "中文"
+                or "English"
             )
             self.logger.bind(tag=TAG).debug(f"获取到选择的语言: {language}")
 

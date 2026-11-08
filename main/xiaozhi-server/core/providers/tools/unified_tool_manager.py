@@ -80,7 +80,7 @@ class ToolManager:
             if not tool_type:
                 return ActionResponse(
                     action=Action.NOTFOUND,
-                    response=f"工具 {tool_name} 不存在",
+                    response=f"Tool {tool_name} does not exist.",
                 )
 
             # 获取对应的执行器
@@ -88,7 +88,7 @@ class ToolManager:
             if not executor:
                 return ActionResponse(
                     action=Action.ERROR,
-                    response=f"工具类型 {tool_type.value} 的执行器未注册",
+                    response=f"No executor for tool type {tool_type.value}.",
                 )
 
             # 执行工具

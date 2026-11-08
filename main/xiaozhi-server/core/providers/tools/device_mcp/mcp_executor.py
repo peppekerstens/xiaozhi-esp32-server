@@ -22,13 +22,13 @@ class DeviceMCPExecutor(ToolExecutor):
         if not hasattr(conn, "mcp_client") or not conn.mcp_client:
             return ActionResponse(
                 action=Action.ERROR,
-                response="设备端MCP客户端未初始化",
+                response="The device MCP client is not initialized.",
             )
 
         if not await conn.mcp_client.is_ready():
             return ActionResponse(
                 action=Action.ERROR,
-                response="设备端MCP客户端未准备就绪",
+                response="The device MCP client is not ready.",
             )
 
         try:

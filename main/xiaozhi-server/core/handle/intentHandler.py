@@ -112,11 +112,11 @@ async def process_intent_result(
                     )
 
                     # 构建带上下文的基础提示
-                    context_prompt = f"""当前时间：{current_time}
-                                        今天日期：{today_date} ({today_weekday})
-                                        今天农历：{lunar_date}
+                    context_prompt = f"""Current time: {current_time}
+                                        Today's date: {today_date} ({today_weekday})
+                                        Today's lunar date: {lunar_date}
 
-                                        请根据以上信息回答用户的问题：{original_text}"""
+                                        Use this information to answer the question of the user: {original_text}"""
 
                     # 使用异步调用避免阻塞事件循环，影响其他设备的音频播放
                     try:
@@ -179,7 +179,7 @@ async def process_intent_result(
                 except Exception as e:
                     conn.logger.bind(tag=TAG).error(f"工具调用失败: {e}")
                     result = ActionResponse(
-                        action=Action.ERROR, result="工具调用超时，请一会再试下哈", response="工具调用超时，请一会再试下哈"
+                        action=Action.ERROR, result="The tool call took too long. Please try again later.", response="The tool call took too long. Please try again later."
                     )
 
                 # 上报工具调用结果
