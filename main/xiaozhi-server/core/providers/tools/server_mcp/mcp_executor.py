@@ -28,7 +28,7 @@ class ServerMCPExecutor(ToolExecutor):
         if not self._initialized or not self.mcp_manager:
             return ActionResponse(
                 action=Action.ERROR,
-                response="MCP管理器未初始化",
+                response="The MCP manager is not initialized.",
             )
 
         try:

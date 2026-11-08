@@ -19,13 +19,13 @@ class MCPEndpointExecutor(ToolExecutor):
         if not hasattr(conn, "mcp_endpoint_client") or not conn.mcp_endpoint_client:
             return ActionResponse(
                 action=Action.ERROR,
-                response="MCP接入点客户端未初始化",
+                response="The MCP endpoint client is not initialized.",
             )
 
         if not await conn.mcp_endpoint_client.is_ready():
             return ActionResponse(
                 action=Action.ERROR,
-                response="MCP接入点客户端未准备就绪",
+                response="The MCP endpoint client is not ready.",
             )
 
         try:

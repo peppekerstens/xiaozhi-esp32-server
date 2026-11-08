@@ -129,7 +129,7 @@ class ServerMCPManager:
                 break
 
         if not target_client:
-            raise ValueError(f"工具 {tool_name} 在任意MCP服务中未找到")
+            raise ValueError(f"Tool {tool_name} was not found in any MCP service.")
 
         # 带重试机制的工具调用
         for attempt in range(max_retries):

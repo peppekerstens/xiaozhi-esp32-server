@@ -23,7 +23,7 @@ class ServerPluginExecutor(ToolExecutor):
         func_item = all_function_registry.get(tool_name)
         if not func_item:
             return ActionResponse(
-                action=Action.NOTFOUND, response=f"插件函数 {tool_name} 不存在"
+                action=Action.NOTFOUND, response=f"Plugin function {tool_name} does not exist."
             )
 
         try:
