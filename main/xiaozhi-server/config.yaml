@@ -287,6 +287,8 @@ Intent:
       # play_music是服务器自带的音乐播放，hass_play_music是通过home assistant控制的独立外部程序音乐播放
       # 如果用了hass_play_music，就不要开启play_music，两者只留一个
       - play_music
+      # The hearing test probe of G1: repeat the last sentence of the user with the robot voice (alpha2-brain#108)
+      - repeat_last_utterance
       #- hass_state
       #- hass_play_music
 
