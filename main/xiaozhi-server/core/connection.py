@@ -63,13 +63,13 @@ DIRECT_ANSWER_TOOL = {
     "type": "function",
     "function": {
         "name": "direct_answer",
-        "description": "当用户的请求不匹配其他任何工具时，可用此选项直接回复。将回复内容写在response参数里。",
+        "description": "Use this to answer directly when the request does not match any other tool. Put the answer in the response parameter.",
         "parameters": {
             "type": "object",
             "properties": {
                 "response": {
                     "type": "string",
-                    "description": "你回复用户的完整内容",
+                    "description": "The full answer to the user",
                 },
             },
             "required": ["response"],
@@ -1122,7 +1122,7 @@ class ConnectionHandler:
             self.dialogue.put(
                 Message(
                     role="user",
-                    content="[系统提示] 已达到最大工具调用次数限制，请你基于目前已经获取的所有信息，直接给出最终答案。不要再尝试调用任何工具。",
+                    content="[System notice] The limit of tool calls is reached. Give the final answer now with the information that you have. Do not call a tool again.",
                 )
             )
 
@@ -1510,7 +1510,7 @@ class ConnectionHandler:
                         )
                         # 超时时返回错误响应，避免整个流程卡死
                         tool_results.append((
-                            ActionResponse(action=Action.ERROR, result="哎呀，网络遇到点问题，请稍后再试下！"),
+                            ActionResponse(action=Action.ERROR, result="Sorry, I have a network problem. Please try again later."),
                             tool_call_data
                         ))
                         # 上报工具调用错误

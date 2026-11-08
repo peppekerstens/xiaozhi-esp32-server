@@ -26,15 +26,15 @@ _wakeup_logger = setup_logging()
 WAKEUP_CONFIG = {
     "refresh_time": 10,
     "responses": [
-        "我一直都在呢，您请说。",
-        "在的呢，请随时吩咐我。",
-        "来啦来啦，请告诉我吧。",
-        "您请说，我正听着。",
-        "请您讲话，我准备好了。",
-        "请您说出指令吧。",
-        "我认真听着呢，请讲。",
-        "请问您需要什么帮助？",
-        "我在这里，等候您的指令。",
+        "I am here. Please speak.",
+        "Yes, I am here. Tell me what you need.",
+        "I am here. Please tell me.",
+        "Go ahead. I am listening.",
+        "Please speak. I am ready.",
+        "Please say your command.",
+        "I am listening carefully. Please speak.",
+        "How can I help you?",
+        "I am here. I wait for your command.",
     ],
 }
 
@@ -109,7 +109,7 @@ async def checkWakeupWords(conn: "ConnectionHandler", text):
             "voice": "default",
             "file_path": "config/assets/wakeup_words_short.wav",
             "time": 0,
-            "text": "我在这里哦！",
+            "text": "I am here!",
         }
 
     # 获取音频数据
