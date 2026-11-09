@@ -52,7 +52,7 @@ def get_current_lunar_date() -> str:
             today_lunar.lunarDayCn,
         )
     except Exception:
-        return "农历获取失败"
+        return "The lunar date is not available."
 
 
 def get_current_time_info() -> tuple:

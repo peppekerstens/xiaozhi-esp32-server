@@ -154,6 +154,6 @@ class ServerPluginExecutor(ToolExecutor):
         try:
             func_item.description["function"]["parameters"]["properties"]["source"][
                 "description"
-            ] = f"新闻源的标准中文名称，例如{sources_str}等。可选参数，如果不提供则使用默认新闻源"
+            ] = f"The standard Chinese name of a news source, for example {sources_str}. Optional. If not given, the default news source is used."
         except (KeyError, TypeError):
             pass
