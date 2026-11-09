@@ -38,7 +38,7 @@ def create_instance(class_name, *args, **kwargs):
             sys.modules[lib_name] = importlib.import_module(f'{lib_name}')
         return sys.modules[lib_name].TTSProvider(*args, **kwargs)
 
-    raise ValueError(f"不支持的TTS类型: {class_name}，请检查该配置的type是否设置正确")
+    raise ValueError(f"The TTS type is not supported: {class_name}. Check the type value in the config.")
 
 
 class MarkdownCleaner:

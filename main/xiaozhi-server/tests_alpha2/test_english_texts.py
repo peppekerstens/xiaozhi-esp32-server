@@ -12,6 +12,7 @@ CJK = re.compile(r"[一-鿿]")
 
 # Files that carry a text that the robot speaks, or a text that the LLM gets back from a tool.
 VOICE_FILES = [
+    "core/connection.py",
     "core/handle/helloHandle.py",
     "core/handle/intentHandler.py",
     "core/handle/receiveAudioHandle.py",
@@ -21,14 +22,18 @@ VOICE_FILES = [
     "core/providers/tools/mcp_endpoint/mcp_endpoint_handler.py",
     "core/providers/tools/mcp_endpoint/mcp_endpoint_executor.py",
     "core/providers/tools/server_mcp/mcp_executor.py",
+    "core/providers/tools/server_mcp/mcp_manager.py",
+    "core/providers/tools/server_plugins/plugin_executor.py",
     "core/providers/tools/unified_tool_manager.py",
     "core/providers/tools/unified_tool_handler.py",
+    "core/utils/current_time.py",
     "core/utils/dialogue.py",
     "core/utils/prompt_manager.py",
+    "core/utils/tts.py",
     "plugins_func/functions/handle_exit_intent.py",
 ]
-# Class 3: a value that the code compares with a config value or with a Chinese speaker name.
-KEEP = {"你的", "未知说话人"}
+# Values that must stay in Chinese: comparison values, speaker names, calendar data, source names.
+KEEP = {"你的", "未知说话人", "澎湃新闻;百度热搜;财联社", "%s年%s%s"}
 LOG_METHODS = {"info", "debug", "warning", "error", "exception", "critical", "print"}
 
 

@@ -569,7 +569,7 @@ class ConnectionHandler:
                     {
                         "type": "server",
                         "status": "success",
-                        "message": "服务器重启中...",
+                        "message": "The server is restarting...",
                         "content": {"action": "restart"},
                     }
                 )
@@ -621,7 +621,7 @@ class ConnectionHandler:
             )
             self.logger = create_connection_logger(self.selected_module_str)
 
-            """初始化组件"""
+            # Initialize the components
             if self.config.get("prompt") is not None:
                 user_prompt = self.config["prompt"]
                 # 使用快速提示词进行初始化
@@ -631,7 +631,7 @@ class ConnectionHandler:
                     f"快速初始化组件: prompt成功 {prompt[:50]}..."
                 )
 
-            """初始化本地组件"""
+            # Initialize the local components
             if self.vad is None:
                 self.vad = self._vad
             if self.asr is None:
@@ -644,15 +644,15 @@ class ConnectionHandler:
                 self.asr.open_audio_channels(self), self.loop
             )
 
-            """加载记忆"""
+            # Load the memory
             self._initialize_memory()
-            """加载意图识别"""
+            # Load the intent handler
             self._initialize_intent()
-            """初始化上报线程"""
+            # Start the report threads
             self._init_report_threads()
-            """更新系统提示词"""
+            # Update the system prompt
             self._init_prompt_enhancement()
-            """注入工具调用few-shot示例（仅function_call模式）"""
+            # Inject the tool-call few-shot examples (function_call mode only)
             self._inject_tool_call_fewshot()
 
         except Exception as e:
@@ -697,40 +697,40 @@ class ConnectionHandler:
 
         # 示例1：direct_answer（回复内容写在 response 参数里，无需递归）
         da_tc_id = "fewshot_da_001"
-        self.dialogue.put(Message(role="user", content="给我讲个故事吧", is_temporary=True))
+        self.dialogue.put(Message(role="user", content="Tell me a story.", is_temporary=True))
         self.dialogue.put(Message(
             role="assistant",
             tool_calls=[{
                 "id": da_tc_id,
-                "function": {"arguments": '{"response": "好呀，你想听什么类型的呀？童话、冒险还是搞笑的？选一个我给你开讲~"}', "name": "direct_answer"},
+                "function": {"arguments": '{"response": "Sure. What kind of story? A fairy tale, an adventure, or a funny one. Pick one."}', "name": "direct_answer"},
                 "type": "function", "index": 0,
             }],
             is_temporary=True,
         ))
         self.dialogue.put(Message(
             role="tool", tool_call_id=da_tc_id,
-            content="已直接回复", is_temporary=True,
+            content="Replied directly.", is_temporary=True,
         ))
 
         # 示例2：真实工具调用（handle_exit_intent）
         if "handle_exit_intent" in tool_names:
             tc_id = "fewshot_exit_001"
-            self.dialogue.put(Message(role="user", content="拜拜", is_temporary=True))
+            self.dialogue.put(Message(role="user", content="Bye.", is_temporary=True))
             self.dialogue.put(Message(
                 role="assistant",
                 tool_calls=[{
                     "id": tc_id,
-                    "function": {"arguments": '{"say_goodbye": "再见，下次再聊~"}', "name": "handle_exit_intent"},
+                    "function": {"arguments": '{"say_goodbye": "Goodbye. Talk again next time."}', "name": "handle_exit_intent"},
                     "type": "function", "index": 0,
                 }],
                 is_temporary=True,
             ))
             self.dialogue.put(Message(
                 role="tool", tool_call_id=tc_id,
-                content="退出意图已处理", is_temporary=True,
+                content="The exit intent is handled.", is_temporary=True,
             ))
             self.dialogue.put(Message(
-                role="assistant", content="再见，下次再聊~", is_temporary=True,
+                role="assistant", content="Goodbye. Talk again next time.", is_temporary=True,
             ))
 
         self.logger.bind(tag=TAG).debug("已注入工具调用 few-shot 示例")
@@ -964,7 +964,7 @@ class ConnectionHandler:
     def _initialize_memory(self):
         if self.memory is None:
             return
-        """初始化记忆模块"""
+        # Initialize the memory module
         self.memory.init_memory(
             role_id=self.device_id,
             llm=self.llm,
@@ -1011,8 +1011,8 @@ class ConnectionHandler:
         ]["type"]
         if self.intent_type == "function_call" or self.intent_type == "intent_llm":
             self.load_function_plugin = True
-        """初始化意图识别模块"""
-        # 获取意图识别配置
+        # Initialize the intent module
+        # Get the intent config
         intent_config = self.config["Intent"]
         intent_type = self.config["Intent"][self.config["selected_module"]["Intent"]][
             "type"
@@ -1045,7 +1045,7 @@ class ConnectionHandler:
                 self.intent.set_llm(self.llm)
                 self.logger.bind(tag=TAG).info("使用主LLM作为意图识别模型")
 
-        """加载统一工具处理器"""
+        # Load the unified tool handler
         self.func_handler = UnifiedToolHandler(self)
 
         # 异步初始化工具处理器
