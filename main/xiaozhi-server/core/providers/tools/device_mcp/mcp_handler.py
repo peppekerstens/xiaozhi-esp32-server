@@ -7,6 +7,7 @@ from core.utils.util import get_vision_url
 from core.utils.auth import AuthToken
 from config.logger import setup_logging
 from .mcp_client import MCPClient
+from .tool_error import error_text
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -293,9 +294,7 @@ async def call_mcp_tool(
 
         if isinstance(raw_result, dict):
             if raw_result.get("isError") is True:
-                error_msg = raw_result.get(
-                    "error", "The tool gave no error details."
-                )
+                error_msg = error_text(raw_result)
                 logger.bind(tag=TAG).warning(f"Tool {actual_name} returned an error: {error_msg}")
                 raise RuntimeError("I could not do that.")
 
