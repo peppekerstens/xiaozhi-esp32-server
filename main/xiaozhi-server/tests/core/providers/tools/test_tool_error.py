@@ -1,4 +1,7 @@
-"""error_text must return the app text of a device MCP tool error result."""
+"""error_text must return the app text of a device MCP tool error result.
+
+Run with: python -m pytest -q --noconftest tests/core/providers/tools/test_tool_error.py
+(the test needs no project import and no config file)."""
 import importlib.util
 from pathlib import Path
 

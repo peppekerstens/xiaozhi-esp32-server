@@ -28,11 +28,7 @@ import sys
 import types
 from pathlib import Path
 
-try:
-    import yaml
-except ModuleNotFoundError:
-    # A bare environment (pytest only) can still run the light unit tests.
-    yaml = None
+import yaml
 
 # Windows console 默认 GBK 编码；emoji / 中文 print 会炸，强制 UTF-8。
 try:
@@ -77,9 +73,6 @@ _CUSTOM_CONFIG = Path(os.environ["PYTEST_CONFIG_FILE"]) if os.environ.get(
 
 def _load_via_file_merge() -> dict:
     """纯文件合并：config.yaml + data/.config.yaml。和生产单模块部署一致。"""
-    if yaml is None:
-        # Bare environment: no config file merge, only the light tests can run.
-        return {}
     from config.config_loader import merge_configs
 
     config: dict = {}
@@ -96,7 +89,7 @@ def _load_via_file_merge() -> dict:
 
 # 全模块部署检测（在任何模式下都 fail-fast，避免触发远程 API）。
 # 全模块部署会让 ``load_config`` 走 manager-api 远程拉取，pytest 不应该触发。
-if yaml is not None and _CUSTOM_CONFIG.exists():
+if _CUSTOM_CONFIG.exists():
     _raw_custom = yaml.safe_load(_CUSTOM_CONFIG.read_text(encoding="utf-8")) or {}
     _api_cfg = _raw_custom.get("manager-api", {})
     _has_url = bool(_api_cfg.get("url"))
@@ -146,19 +139,14 @@ def _init_service_noop(_config):
     return None
 
 
-try:
-    import config.config_loader as _cl  # noqa: E402
-    import config.manage_api_client as _mac  # noqa: E402
-    _cl.load_config = _load_config_patched
-    _mac.init_service = _init_service_noop
-    _mac.get_server_config = _get_server_config_patched
-    # 清空 ManageApiClient 单例，避免前面已经被其它代码触发过实例化。
-    _mac.ManageApiClient._instance = None
-    _mac.ManageApiClient._closed = True
-except ImportError:
-    # Bare environment: the project modules are not importable. The light
-    # unit tests import their module by file path, so they need no patches.
-    pass
+import config.config_loader as _cl  # noqa: E402
+import config.manage_api_client as _mac  # noqa: E402
+_cl.load_config = _load_config_patched
+_mac.init_service = _init_service_noop
+_mac.get_server_config = _get_server_config_patched
+# 清空 ManageApiClient 单例，避免前面已经被其它代码触发过实例化。
+_mac.ManageApiClient._instance = None
+_mac.ManageApiClient._closed = True
 
 
 # ---------------------------------------------------------------------------
