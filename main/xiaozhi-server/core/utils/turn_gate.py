@@ -7,7 +7,9 @@ LLM call. The gate does four things (config section ``turn_gate``):
 1. Noise: drop short fragments (fewer than ``min_words`` words) unless all
    their content words are on ``allow_words``. Drop filler-only fragments.
 2. Barge-in: while the device speaks, drop each fragment, except a stop
-   phrase. A stop phrase aborts the answer.
+   phrase. A stop phrase aborts the answer. A stop word that is only part of
+   a word of the robot's own recent speech ("unstoppable") is a self-word:
+   the gate drops it (alpha2-brain#92).
 3. Echo: drop a fragment that repeats the words of the last reply
    (``echo_overlap``), or that arrives within ``echo_guard_ms`` after the
    reply ended.
@@ -52,6 +54,9 @@ DEFAULTS = {
     "echo_overlap": 0.6,
     "echo_window_s": 15,
     "supersede": True,
+    # alpha2-brain#92: the robot hears its own "unstoppable" as "stop".
+    "self_word_filter": True,
+    "self_word_window_s": 3,
 }
 
 
@@ -94,6 +99,31 @@ def is_stop(text: str, cfg: dict) -> bool:
     return 0 < len(ws) <= 4 and any(w in set(cfg["stop_words"]) for w in ws)
 
 
+# A robot word keeps its hyphens and apostrophes: "non-stop" is one word.
+ROBOT_WORD_RE = re.compile(r"[^\W\d_]+(?:[-'][^\W\d_]+)*", re.UNICODE)
+
+
+def is_self_word(text: str, cfg: dict, robot_text: str) -> bool:
+    """True when each stop word of ``text`` is only part of a longer word of
+    ``robot_text``, the speech of the robot (for example "unstoppable",
+    "stopped" or "non-stop"). The robot then heard itself.
+
+    False when ``robot_text`` has the stop word as a whole word. Then the
+    owner may say it, and the stop works (fail safe).
+    """
+    stops = set(cfg["stop_words"])
+    heard = [w for w in words(text) if w in stops]
+    robot = ROBOT_WORD_RE.findall((robot_text or "").lower())
+    if not heard or not robot:
+        return False
+    for w in heard:
+        if w in robot:
+            return False
+        if not any(w in r for r in robot):
+            return False
+    return True
+
+
 def is_echo(text: str, cfg: dict, spoken: str) -> bool:
     """True when most content words of ``text`` are in the reply ``spoken``."""
     if not spoken:
@@ -119,6 +149,7 @@ def _state(conn: "ConnectionHandler") -> dict:
             "last_spoken": "",  # reply text of the last finished turn
             "speak_end": 0.0,  # monotonic time of the last tts stop
             "speaking": False,  # audio of the current turn has started
+            "recent": [],  # (text, monotonic time) of the last sentences
         }
         conn._turn_gate = st
     return st
@@ -132,6 +163,7 @@ def on_sentence(conn: "ConnectionHandler", text: Optional[str]) -> None:
     st["speaking"] = True
     if text:
         st["spoken"] = (st["spoken"] + " " + text).strip()
+        st["recent"] = (st["recent"] + [(text, time.monotonic())])[-2:]
 
 
 def on_speech_end(conn: "ConnectionHandler") -> None:
@@ -142,12 +174,22 @@ def on_speech_end(conn: "ConnectionHandler") -> None:
     st["spoken"] = ""
     st["speaking"] = False
     st["speak_end"] = time.monotonic()
+    st["recent"] = [(t, st["speak_end"]) for t, _ in st["recent"]]
     if enabled(conn):
         # Push-to-talk scripts wait for this line to close the microphone.
         conn.logger.bind(tag=TAG).info("turn_gate: speech end")
 
 
 # ---- decision for one ASR fragment ------------------------------------------
+
+def robot_recent_text(st: dict, window_s: float) -> str:
+    """The sentence that plays now, the one before it, and the last sentences
+    for ``window_s`` seconds after the speech ends (the ASR delay)."""
+    now = time.monotonic()
+    if st["speaking"]:
+        return " ".join(t for t, _ in st["recent"])
+    return " ".join(t for t, ts in st["recent"] if now - ts <= window_s)
+
 
 def check(conn: "ConnectionHandler", text: str) -> str:
     """Return the action for a voice fragment: ``chat``, ``drop`` or ``stop``."""
@@ -158,6 +200,11 @@ def check(conn: "ConnectionHandler", text: str) -> str:
     busy = conn.client_is_speaking or st["inflight"]
     stop = is_stop(text, cfg)
 
+    if stop and cfg["self_word_filter"] and is_self_word(
+        text, cfg, robot_recent_text(st, float(cfg["self_word_window_s"]))
+    ):
+        log.info(f"turn_gate: stop word is part of a robot word, drop: {text!r}")
+        return "drop"
     if stop:
         if busy:
             log.info(f"turn_gate: stop phrase, abort the answer: {text!r}")
