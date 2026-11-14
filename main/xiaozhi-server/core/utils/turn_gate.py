@@ -4,8 +4,9 @@ An open microphone hears background talk, noise and the device's own speech.
 Without a gate each ASR fragment aborts the current answer and starts a new
 LLM call. The gate does four things (config section ``turn_gate``):
 
-1. Noise: drop short fragments (fewer than ``min_words`` words) unless all
-   their content words are on ``allow_words``. Drop filler-only fragments.
+1. Noise: drop short fragments (fewer than ``min_words`` words) unless at
+   least one of their content words is on ``allow_words``. Drop filler-only
+   fragments.
 2. Barge-in: while the device speaks, drop each fragment, except a stop
    phrase. A stop phrase aborts the answer. A stop word that is only part of
    a word of the robot's own recent speech ("unstoppable") is a self-word:
@@ -38,6 +39,9 @@ DEFAULTS = {
     "allow_words": [
         "stop", "hello", "hi", "hey", "thanks", "thank", "help", "dance", "wave",
         "sit", "stand", "goodbye", "bye", "hallo", "dank", "dankjewel", "doei", "dag",
+        # alpha2-brain#134: short commands that are real requests, not noise.
+        "up", "down", "squat", "volume", "louder", "quieter",
+        "look", "turn", "walk", "left", "right", "light", "repeat",
     ],
     # Short answers. They count only as a reply to a question of the device
     # (the last reply ends with "?") within ``answer_window_s``.
@@ -89,7 +93,9 @@ def is_noise(text: str, cfg: dict, asked: bool = False) -> bool:
         allow = set(cfg["allow_words"])
         if asked:
             allow |= set(cfg["answer_words"])
-        return not all(w in allow for w in content)
+        # alpha2-brain#134: a short fragment is a request when at least one
+        # of its content words is on ``allow_words`` (not all of them).
+        return not any(w in allow for w in content)
     return False
 
 
