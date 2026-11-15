@@ -72,5 +72,5 @@ def test_tool_error_is_a_short_english_sentence():
         "core/providers/tools/mcp_endpoint/mcp_endpoint_handler.py",
     ):
         source = open(os.path.join(ROOT, path), encoding="utf8").read()
-        assert 'raise RuntimeError("I could not do that.")' in source
+        assert "tool_error_message" in source
         assert "工具调用错误" not in source

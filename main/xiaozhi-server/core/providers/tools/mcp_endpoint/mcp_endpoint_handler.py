@@ -6,6 +6,7 @@ import re
 import websockets
 from config.logger import setup_logging
 from .mcp_endpoint_client import MCPEndpointClient
+from ..device_mcp.tool_error import error_text, tool_error_message
 
 TAG = __name__
 logger = setup_logging()
@@ -372,11 +373,9 @@ async def call_mcp_endpoint_tool(
 
         if isinstance(raw_result, dict):
             if raw_result.get("isError") is True:
-                error_msg = raw_result.get(
-                    "error", "The tool gave no error details."
-                )
+                error_msg = error_text(raw_result)
                 logger.bind(tag=TAG).warning(f"Tool {actual_name} returned an error: {error_msg}")
-                raise RuntimeError("I could not do that.")
+                raise RuntimeError(tool_error_message(raw_result))
 
             content = raw_result.get("content")
             if isinstance(content, list) and len(content) > 0:
