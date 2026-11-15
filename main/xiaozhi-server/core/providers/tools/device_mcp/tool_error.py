@@ -8,6 +8,12 @@ unit test can load it by file path without the heavy package imports.
 
 NO_ERROR_DETAILS = "The tool gave no error details."
 
+# The error text of a tool that refuses motion. Both handlers use these texts,
+# so they live here in one place.
+MOTION_REFUSED_PREFIX = "Motion is refused"
+MOTION_OFF_TEXT = "My motion is off. The owner must turn it on."
+GENERIC_ERROR_TEXT = "I could not do that."
+
 
 def error_text(raw_result) -> str:
     """Return the error text of a device MCP tool result.
@@ -36,3 +42,14 @@ def error_text(raw_result) -> str:
                 return text
 
     return NO_ERROR_DETAILS
+
+
+def tool_error_message(raw_result) -> str:
+    """Return the text the robot speaks for a tool error result.
+
+    A result whose error text starts with 'Motion is refused' gets the
+    motion-off text. Every other error gets the generic text.
+    """
+    if error_text(raw_result).startswith(MOTION_REFUSED_PREFIX):
+        return MOTION_OFF_TEXT
+    return GENERIC_ERROR_TEXT
