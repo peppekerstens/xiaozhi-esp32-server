@@ -1,6 +1,6 @@
 """English only (alpha2-brain#88, D-62): Dutch voice text gives no turn.
 
-Run: python3 -m pytest --noconftest -p no:cacheprovider tests_alpha2/
+Run: cd main/xiaozhi-server && python3 -m pytest --noconftest -p no:cacheprovider tests_alpha2/
 robot_guard uses only the standard library, so no server package is needed.
 """
 import os
