@@ -1,6 +1,6 @@
 """Motion-refused text (alpha2-brain#145): a refused motion gets a specific reply.
 
-Run: cd main/xiaozhi-server && python3 -m pytest -q tests_alpha2/
+Run: cd main/xiaozhi-server && python3 -m pytest --noconftest -p no:cacheprovider tests_alpha2/
 tool_error.py uses only the standard library, so the test loads it by file
 path and reads the handler sources. It imports no server package.
 """

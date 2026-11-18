@@ -1,6 +1,6 @@
 """English texts (alpha2-brain#95, #94): the voice path speaks no Chinese text.
 
-Run: python3 -m pytest --noconftest -p no:cacheprovider tests_alpha2/test_english_texts.py
+Run: cd main/xiaozhi-server && python3 -m pytest --noconftest -p no:cacheprovider tests_alpha2/
 The test reads the source with ast. It imports no server package.
 """
 import ast

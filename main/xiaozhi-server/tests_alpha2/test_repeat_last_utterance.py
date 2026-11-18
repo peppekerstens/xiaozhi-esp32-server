@@ -1,6 +1,6 @@
 """Repeat the last user sentence (alpha2-brain#108).
 
-Run: cd main/xiaozhi-server && uv run --isolated --with pytest python -m pytest -q tests_alpha2/
+Run: cd main/xiaozhi-server && python3 -m pytest --noconftest -p no:cacheprovider tests_alpha2/
 """
 import os
 import sys
